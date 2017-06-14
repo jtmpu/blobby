@@ -3,14 +3,17 @@
 import re
 import time
 import threading
-
 from ws4py.client.threadedclient import WebSocketClient
 
-def send_wait(ws, data_arr, timeout, regex_pattern=""):
+import log
+
+def send_wait(ws, data_arr, timeout=1000, regex_pattern=""):
     if regex_pattern is not None and regex_pattern != "":
+        log.get_logger().log("Using regex: {}".format(regex_pattern), log.DEBUG)
         ws.set_regex_match(regex_pattern)
 
     for data in data_arr:
+        log.get_logger().log("Sending: {}".format(data), log.DEBUG) 
         ws.send(data)
 
     elapsed = 0.0 
@@ -24,8 +27,9 @@ def send_wait(ws, data_arr, timeout, regex_pattern=""):
         
     return ws.s_data
 
-def create_ws(url, headers=[], debug=False):
-    ws = WSClient(url, headers, debug)
+def create_ws(url, headers=[]):
+    ws = WSClient(url, headers)
+    log.get_logger().log("Created WS ({}, {}).".format(url, headers), log.DEBUG)
     ws.s_done = False
     ws.s_match_regex = False
     ws.s_data = []
@@ -33,33 +37,31 @@ def create_ws(url, headers=[], debug=False):
     return ws
 
 class WSClient(WebSocketClient):
-    def __init__(self, url, headers, debug):
+    def __init__(self, url, headers):
         WebSocketClient.__init__(self, url, headers=headers)
-        self.debug = debug
         self.s_lock = threading.Lock()
         self.s_done = False
         self.s_match_regex = False
         self.s_data = []
 
     def opened(self):
-        if self.debug:
-            print("[+] WebSocket opened.")
+        log.get_logger().log("WebSocket opened.", log.INFO)
         return
 
     def closed(self, code, reason):
-        if self.debug:
-            print("[+] WebSocket closed")
+        log.get_logger().log("WebSocket closed: ({}, {})".format(code, reason), log.INFO)
         self.set_s_done(True)
         return
 
     def received_message(self, m):
-        if self.debug:
-            print("[+] WebSocket receved: {}".format(m))
+        log.get_logger().log("WebSocket receved: {}".format(m), log.INFO)
         self.s_data.append(str(m))
 
         if self.s_match_regex:
             message = str(m)
+            log.get_logger().log("Matching '{}' with pattern '{}'.".format(message, self.s_pattern), log.DEBUG)
             if re.search(self.s_pattern, message):
+                log.get_logger().log("Found match: {}".format(message), log.DEBUG)
                 self.set_s_done(True) 
         return
 
@@ -75,3 +77,13 @@ class WSClient(WebSocketClient):
         self.s_lock.acquire()
         self.s_done = value
         self.s_lock.release()
+
+
+def validate_fix_url(url):
+    if re.match(r'^http://', url):
+        url = "ws://" + url[7:]
+    elif re.match(r'^https://', url):
+        url = "wss://" + url[8:]
+    elif re.match(r'^ws(s)?://', url) is None:
+        url = "ws://" + url 
+    return url
