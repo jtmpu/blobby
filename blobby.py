@@ -19,6 +19,7 @@ def parse_cli_args():
     parser.add_argument("-t", "--timeout", help="Max amount of milliseconds to wait", default=1000, type=int)
     parser.add_argument("-d", "--data", help="The data to send to the websocket", nargs="*", default=[])
     parser.add_argument("-H", "--headers", help="Array with headers, specified in the form of -H \"Content-Type: blabla\" \"X-Custom-Header: qwe\"", nargs="*", default=[])
+    parser.add_argument("-p", "--pattern", help="If specified, uses this regex pattern to determine when the correct message has been received. Uses re.search(<pattern,...)", default="")
     args = parser.parse_args()
 
     # Check for "ws(s)?://" at the beginning, or add it for the lazy users
@@ -48,9 +49,10 @@ if __name__ == "__main__":
     data = args["data"]
     timeout = args["timeout"]
     headers = args["headers"]
+    pattern = args["pattern"]
     
     ws = wslib.create_ws(url, headers=headers, debug=False)
     ws.connect()
-    responses = wslib.send_wait(ws, data, timeout)
+    responses = wslib.send_wait(ws, data, timeout, regex_pattern=pattern)
     for response in responses:
         print(response)
