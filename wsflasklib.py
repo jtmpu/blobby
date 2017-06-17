@@ -46,7 +46,22 @@ O-Timeout: 1000<br/>
 O-Header-RegexPattern: [^q]+<br/>
 O-Header-Cookie: PHPSESSID=hgcu3c99epbbqo98ojru4pv8k5<br/>
 <br/>
-["qwe"]<br/>
+["qwe", {"some_type":"value"}]<br/>
+</code>
+<br>
+<code>
+POST /ws/send_wait HTTP/1.1<br>
+Host: 127.0.0.1:5000<br>
+Content-Type: application/blobby<br>
+O-Url: http://127.0.0.1:19080<br>
+O-Timeout: 1000<br>
+O-Delimiter: |DELIM|<br>
+O-Return-JSON: True<br>
+O-Header-Cookie: PHPSESSID=hgcu3c99epbbqo98ojru4pv8k5<br>
+<br>
+{"username":"admin","password":"admin"}|DELIM|<br>
+{"request":"set","property":"test","value":"qwe"}<br>
+
 </code>"""
     response += "<p>All options are sent as headers with the 'O-' prefix</p>"
     response += "<p>Specify websocket endpoint in the URL param (will transform http(s) to ws(s), or add ws)</p>"
@@ -54,6 +69,8 @@ O-Header-Cookie: PHPSESSID=hgcu3c99epbbqo98ojru4pv8k5<br/>
     response += "<p>Timeout is the maximum amount of time to wait.</p>"
     response += "<p>Specify a regex to match the message to wait for</p>"
     response += "<p>Prefix any headers that should be sent with the 'O-Header-' prefix.</p>"
+    response += "<p>When using application/blobby, specify the char-sequence which splits the messages with the O-Delimiter header</p>"
+    response += "<p>If O-Return-JSON is set to true, the server attempts to parse the responses from the web application as JSON to return a better format of the data.</p>"
     return SIMPLE_PAGE_TEMPLATE.format(response)
 
 @app.route(ENDPOINTS["send_wait"], methods=["GET", "POST"])
@@ -70,6 +87,7 @@ def run_send_wait():
     timeout = 1000
     regex_pattern = ""
     delimiter = "|"
+    return_json = False
     headers = []
     for key, value in request.headers.iteritems():
         key = key.lower()
@@ -93,6 +111,8 @@ def run_send_wait():
                     errors["regexpattern"] = "Failed to parse regexpattern: {}".format(e)
             elif re.match("^delim", new_key):
                 delimiter = value
+            elif re.match("^return-json", new_key):
+                return_json = value.lower() == "true"
 
     if len(url) == 0:
         errors["url"] = "Need a url for the websocket endpoint"
@@ -120,9 +140,24 @@ def run_send_wait():
     # TODO: Error check the input json data
     ws = wslib.create_ws(url, headers)
     ws.connect()
-    resp_data = wslib.send_wait(ws, json_data, timeout, regex_pattern)
+    ws_data = wslib.send_wait(ws, json_data, timeout, regex_pattern)
+
+    resp_data = json.dumps(ws_data)
+    if return_json:
+        json_arr = []
+        for data in ws_data:
+            elem = ""
+            try:
+                # Attempt to return a proper JSON array with elements in it 
+                elem = json.loads(data)
+            except:
+                # Just encode it as string, something something lol
+                elem = data
+            json_arr.append(elem)
+        resp_data = json.dumps(json_arr)
+            
     
-    return json.dumps((resp_data)), 200, { "Content-Type": "application/json" }
+    return resp_data, 200, { "Content-Type": "application/json" }
 
 def run_service(port, flask_debug):
     log.get_logger().log("Starting flask service", log.INFO)
