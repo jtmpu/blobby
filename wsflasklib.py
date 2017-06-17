@@ -1,6 +1,8 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 
 import re
+import json
 from flask import Flask
 from flask import Response
 from flask import request
@@ -67,6 +69,7 @@ def run_send_wait():
     url = ""
     timeout = 1000
     regex_pattern = ""
+    delimiter = "|"
     headers = []
     for key, value in request.headers.iteritems():
         key = key.lower()
@@ -88,6 +91,8 @@ def run_send_wait():
                     regex_pattern = value
                 except Exception as e:
                     errors["regexpattern"] = "Failed to parse regexpattern: {}".format(e)
+            elif re.match("^delim", new_key):
+                delimiter = value
 
     if len(url) == 0:
         errors["url"] = "Need a url for the websocket endpoint"
@@ -95,7 +100,21 @@ def run_send_wait():
     if len(errors) > 0:
         return str(errors), 500, { "Content-Type" : "application/json" }
 
-    json_data = request.get_json(force=True)
+    json_data = []
+    if request.content_type == "application/blobby":
+        log.get_logger().log("Content-Type is text/blobby, using a known delimiter to find the message-strings.")
+        data = request.data
+        json_data = filter(lambda x: len(x) > 0, data.split(delimiter))
+    elif request.content_type == "application/json":
+        log.get_logger().log("Content-Type is application/json, WebSocket messages have been sent as JSON structures")
+        data = request.get_json(force=True)
+        if isinstance(data, list):
+           json_data =  map(lambda x: json.dumps(x), data)
+        else:
+            return str({"error":"Specify each JSON message to send as an element in an array."}), 408
+    else:
+        return str({"error":"Incompatible content-type. Use text/plain or application/json"}), 408
+
     log.get_logger().log("Performing WebSocket request with: {} - {} - {}".format(url, headers, json_data), log.INFO) 
 
     # TODO: Error check the input json data
@@ -103,7 +122,7 @@ def run_send_wait():
     ws.connect()
     resp_data = wslib.send_wait(ws, json_data, timeout, regex_pattern)
     
-    return str(resp_data), 200, { "Content-Type": "application/json" }
+    return json.dumps((resp_data)), 200, { "Content-Type": "application/json" }
 
 def run_service(port, flask_debug):
     log.get_logger().log("Starting flask service", log.INFO)
