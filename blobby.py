@@ -14,7 +14,7 @@ def parse_cli_args():
     Returns a dict with the run time options required
     to run blobby
     """ 
-    parser = argparse.ArgumentParser(description="A CLI for websockets.")
+    parser = argparse.ArgumentParser(description="A CLI/HTTP interface for websockets.")
     parser.add_argument("--echo", help="Output the parsed arguments.", default=False, action="store_true")
 
     subparsers = parser.add_subparsers(help="Sub command help")
